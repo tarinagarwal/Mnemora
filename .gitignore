@@ -1,0 +1,128 @@
+# ================================
+# Dependencies
+# ================================
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ================================
+# Build Outputs
+# ================================
+dist/
+dist-electron/
+build/
+out/
+*.asar
+release/
+
+# ================================
+# Local Data (ChromaDB, etc)
+# ================================
+backend/data/
+*.db
+*.sqlite
+*.sqlite3
+chroma/
+chromadb/
+
+# ================================
+# Environment & Config
+# ================================
+.env
+.env.local
+.env.*.local
+.venv/
+venv/
+env/
+ENV/
+
+# ================================
+# IDE & Editors
+# ================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.settings/
+
+# ================================
+# OS Generated
+# ================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ================================
+# Logs & Debug
+# ================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ================================
+# Testing & Coverage
+# ================================
+coverage/
+*.lcov
+.nyc_output/
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+
+# ================================
+# Temporary Files
+# ================================
+*.bak
+*.tmp
+*.temp
+*.cache
+.cache/
+tmp/
+temp/
+
+# ================================
+# Electron Specific
+# ================================
+*.dmg
+*.AppImage
+*.snap
+*.deb
+*.rpm
+*.exe
+*.msi
+
+# ================================
+# Secrets (NEVER commit these)
+# ================================
+*.pem
+*.key
+secrets/
+.secrets
+
