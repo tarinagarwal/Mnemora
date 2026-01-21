@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+body {
+  @apply bg-surface-950 text-surface-100;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-surface-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-surface-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-surface-600;
+}
+
+/* Text Selection */
+::selection {
+  @apply bg-mnemora-500/30 text-mnemora-100;
+}
+
+/* Markdown Content Styles */
+.markdown-content {
+  @apply leading-relaxed;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  @apply font-semibold text-surface-50 mt-4 mb-2;
+}
+
+.markdown-content h1 {
+  @apply text-xl;
+}
+
+.markdown-content h2 {
+  @apply text-lg;
+}
+
+.markdown-content h3 {
+  @apply text-base;
+}
+
+.markdown-content p {
+  @apply mb-3;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  @apply ml-4 mb-3;
+}
+
+.markdown-content li {
+  @apply mb-1;
+}
+
+.markdown-content code {
+  @apply font-mono text-sm bg-surface-800 px-1.5 py-0.5 rounded text-mnemora-300;
+}
+
+.markdown-content pre {
+  @apply bg-surface-800 rounded-lg p-4 mb-3 overflow-x-auto;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-mnemora-500 pl-4 italic text-surface-300 my-3;
+}
+
+.markdown-content a {
+  @apply text-mnemora-400 hover:text-mnemora-300 underline;
+}
+
+/* Animations */
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+.typing-indicator span {
+  animation: typing-dot 1.4s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Glassmorphism Effect */
+.glass {
+  @apply bg-surface-900/80 backdrop-blur-xl border border-surface-700/50;
+}
+
+/* Glow Effects */
+.glow-sm {
+  box-shadow: 0 0 20px -5px theme('colors.mnemora.500 / 30%');
+}
+
+.glow-md {
+  box-shadow: 0 0 40px -10px theme('colors.mnemora.500 / 40%');
+}
+
+/* Gradient Text */
+.gradient-text {
+  @apply bg-gradient-to-r from-mnemora-400 to-mnemora-200 bg-clip-text text-transparent;
+}
