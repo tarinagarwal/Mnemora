@@ -130,10 +130,22 @@ class DocumentIndexer:
         
         # Process each file with progress
         all_chunks = []
+        skipped_files = []
+        
         for idx, file_path in enumerate(files):
             file_name = os.path.basename(file_path)
             try:
                 chunks = await self._process_file(file_path, folder_path)
+                
+                if not chunks:
+                    # File was parsed but produced no content (empty or unsupported)
+                    skipped_files.append({
+                        'file': file_name,
+                        'file_path': file_path,
+                        'reason': 'No content extracted'
+                    })
+                    logger.warning(f"Skipped {file_path}: No content extracted")
+                
                 all_chunks.extend(chunks)
                 yield {
                     'type': 'file_done',
@@ -145,12 +157,13 @@ class DocumentIndexer:
                     'percent': round((idx + 1) / total_files * 100)
                 }
             except Exception as e:
-                logger.error(f"Failed to process {file_path}: {e}")
+                error_msg = str(e)
+                logger.error(f"Failed to process {file_path}: {error_msg}", exc_info=True)
                 yield {
                     'type': 'file_error',
                     'file': file_name,
                     'file_path': file_path,
-                    'error': str(e),
+                    'error': error_msg,
                     'current': idx + 1,
                     'total': total_files
                 }
@@ -217,8 +230,27 @@ class DocumentIndexer:
             if not content.strip():
                 return []
             
+            # Safety check: limit content size to prevent memory issues
+            MAX_CONTENT_SIZE = 10_000_000  # 10MB of text
+            if len(content) > MAX_CONTENT_SIZE:
+                logger.warning(f"File {file_path} is very large ({len(content)} chars), truncating to {MAX_CONTENT_SIZE}")
+                content = content[:MAX_CONTENT_SIZE]
+            
+            # Log file size for debugging
+            logger.debug(f"Processing {file_path}: {len(content)} characters")
+            
             # Chunk the content
-            chunks_text = self._chunk_text(content)
+            try:
+                chunks_text = self._chunk_text(content)
+            except MemoryError:
+                logger.error(f"MemoryError while chunking {file_path}, file too large")
+                return []
+            
+            # Limit number of chunks per file
+            MAX_CHUNKS_PER_FILE = 500
+            if len(chunks_text) > MAX_CHUNKS_PER_FILE:
+                logger.warning(f"File {file_path} produced {len(chunks_text)} chunks, limiting to {MAX_CHUNKS_PER_FILE}")
+                chunks_text = chunks_text[:MAX_CHUNKS_PER_FILE]
             
             # Create chunk metadata
             file_stat = os.stat(file_path)
@@ -247,8 +279,11 @@ class DocumentIndexer:
             
             return chunks
             
+        except MemoryError as e:
+            logger.error(f"MemoryError processing {file_path}: {e}", exc_info=True)
+            return []
         except Exception as e:
-            logger.error(f"Error processing {file_path}: {e}")
+            logger.error(f"Error processing {file_path}: {e}", exc_info=True)
             return []
     
     def _chunk_text(self, text: str) -> List[str]:
@@ -258,8 +293,18 @@ class DocumentIndexer:
         
         chunks = []
         start = 0
+        max_iterations = len(text) // (MAX_CHUNK_SIZE - CHUNK_OVERLAP) + 10  # Safety limit
+        iteration = 0
         
         while start < len(text):
+            iteration += 1
+            if iteration > max_iterations:
+                logger.error(f"Chunking exceeded max iterations. Text length: {len(text)}, start: {start}")
+                # Add remaining text as final chunk
+                if start < len(text):
+                    chunks.append(text[start:])
+                break
+            
             # Find the end of this chunk
             end = start + MAX_CHUNK_SIZE
             
@@ -268,15 +313,28 @@ class DocumentIndexer:
                 break
             
             # Try to break at a natural boundary (newline, period, space)
+            original_end = end
             for sep in ['\n\n', '\n', '. ', ' ']:
                 last_sep = text.rfind(sep, start, end)
                 if last_sep > start:
                     end = last_sep + len(sep)
                     break
             
+            # Safety check: ensure we're making progress
+            if end <= start:
+                logger.warning(f"Chunking not progressing at position {start}, forcing advance")
+                end = start + MAX_CHUNK_SIZE
+            
             chunks.append(text[start:end])
-            start = end - CHUNK_OVERLAP
+            
+            # Move start forward, ensuring we always make progress
+            new_start = max(end - CHUNK_OVERLAP, start + 1)
+            if new_start <= start:
+                logger.error(f"Start position not advancing: {start} -> {new_start}")
+                new_start = start + MAX_CHUNK_SIZE  # Force progress
+            start = new_start
         
+        logger.info(f"Created {len(chunks)} chunks from {len(text)} characters")
         return chunks
     
     def _generate_chunk_id(self, file_path: str, chunk_index: int) -> str:

@@ -50,7 +50,7 @@ class PDFParser:
             return content.strip()
             
         except Exception as e:
-            logger.error(f"Error parsing PDF {file_path}: {e}")
+            logger.error(f"Error parsing PDF {file_path}: {e}", exc_info=True)
             return ""
     
     def _clean_text(self, text: str) -> str:

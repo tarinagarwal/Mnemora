@@ -67,14 +67,17 @@ class CodeParser:
             formatted = f"[File: {file_name}]\n[Language: {lang}]\n\n{content}"
             
             # Extract important structures if possible
-            structures = self._extract_structures(content, lang, ext)
-            if structures:
-                formatted = f"{formatted}\n\n[Structures: {structures}]"
+            try:
+                structures = self._extract_structures(content, lang, ext)
+                if structures:
+                    formatted = f"{formatted}\n\n[Structures: {structures}]"
+            except Exception as struct_error:
+                logger.warning(f"Could not extract structures from {file_path}: {struct_error}")
             
             return formatted.strip()
             
         except Exception as e:
-            logger.error(f"Error parsing code file {file_path}: {e}")
+            logger.error(f"Error parsing code file {file_path}: {e}", exc_info=True)
             return ""
     
     def _extract_structures(self, content: str, lang: str, ext: str) -> str:

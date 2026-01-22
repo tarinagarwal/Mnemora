@@ -1,18 +1,20 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = "http://localhost:8000";
 
 export const useAppStore = create(
   persist(
     (set, get) => ({
       // UI State
       showSources: true,
-      theme: 'dark',
+      theme: "dark",
+      toasts: [], // Array of { id, message, type, duration }
 
       // Indexed Folders
       folders: [],
       indexingStatus: null, // null | { folder, progress, total, status }
+      indexingFileList: [], // Array of { file, status: 'pending' | 'processing' | 'done' | 'error', chunks, error }
 
       // Chat State
       messages: [],
@@ -21,12 +23,12 @@ export const useAppStore = create(
 
       // Models
       availableModels: [],
-      selectedModel: 'llama3.2:3b',
-      selectedEmbeddingModel: 'nomic-embed-text',
+      selectedModel: "llama3.2:3b",
+      selectedEmbeddingModel: "nomic-embed-text",
 
       // Backend Status
-      backendStatus: 'disconnected', // 'connected' | 'disconnected' | 'connecting'
-      ollamaStatus: 'disconnected',
+      backendStatus: "disconnected", // 'connected' | 'disconnected' | 'connecting'
+      ollamaStatus: "disconnected",
 
       // Actions
       setShowSources: (show) => set({ showSources: show }),
@@ -35,205 +37,263 @@ export const useAppStore = create(
       // Folder Management
       addFolder: async (folderPath) => {
         try {
-          set({ 
-            indexingStatus: { 
-              folder: folderPath, 
-              progress: 0, 
-              total: 0, 
-              status: 'Starting...', 
+          set({
+            indexingStatus: {
+              folder: folderPath,
+              progress: 0,
+              total: 0,
+              status: "Starting...",
               currentFile: null,
-              errors: []
-            } 
-          })
-          
+              errors: [],
+            },
+          });
+
           const response = await fetch(`${API_BASE}/index`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ folder_path: folderPath }),
-          })
-          
-          if (!response.ok) throw new Error('Failed to index folder')
-          
-          const reader = response.body.getReader()
-          const decoder = new TextDecoder()
-          let documentCount = 0
-          let errors = []
-          
+          });
+
+          if (!response.ok) throw new Error("Failed to index folder");
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let documentCount = 0;
+          let errors = [];
+
           while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            
-            const chunk = decoder.decode(value)
-            const lines = chunk.split('\n').filter(line => line.startsWith('data: '))
-            
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk
+              .split("\n")
+              .filter((line) => line.startsWith("data: "));
+
             for (const line of lines) {
               try {
-                const data = JSON.parse(line.slice(6))
-                
-                if (data.type === 'discovery') {
-                  set({ 
-                    indexingStatus: { 
-                      folder: folderPath, 
-                      progress: 0, 
-                      total: data.total_files, 
+                const data = JSON.parse(line.slice(6));
+
+                if (data.type === "discovery") {
+                  set({
+                    indexingStatus: {
+                      folder: folderPath,
+                      progress: 0,
+                      total: data.total_files,
                       status: `Found ${data.total_files} files`,
                       currentFile: null,
-                      errors: []
-                    }
-                  })
-                } else if (data.type === 'file_done') {
-                  documentCount++
-                  set({ 
-                    indexingStatus: { 
-                      folder: folderPath, 
-                      progress: data.current, 
-                      total: data.total, 
+                      errors: [],
+                    },
+                    indexingFileList: [], // Reset file list
+                  });
+                } else if (data.type === "file_done") {
+                  documentCount++;
+                  set((state) => ({
+                    indexingStatus: {
+                      folder: folderPath,
+                      progress: data.current,
+                      total: data.total,
                       status: `Indexing: ${data.percent}%`,
                       currentFile: data.file,
-                      errors
-                    }
-                  })
-                } else if (data.type === 'file_error') {
-                  errors.push({ file: data.file, error: data.error })
-                  set({ 
-                    indexingStatus: { 
-                      folder: folderPath, 
-                      progress: data.current, 
-                      total: data.total, 
+                      errors,
+                    },
+                    indexingFileList: [
+                      ...state.indexingFileList,
+                      {
+                        file: data.file,
+                        file_path: data.file_path,
+                        status: "done",
+                        chunks: data.chunks,
+                      },
+                    ],
+                  }));
+                } else if (data.type === "file_error") {
+                  errors.push({ file: data.file, error: data.error });
+                  set((state) => ({
+                    indexingStatus: {
+                      folder: folderPath,
+                      progress: data.current,
+                      total: data.total,
                       status: `Error on ${data.file}`,
                       currentFile: data.file,
-                      errors
-                    }
-                  })
-                } else if (data.type === 'embedding') {
-                  set({ 
-                    indexingStatus: { 
-                      folder: folderPath, 
-                      progress: 100, 
-                      total: 100, 
+                      errors,
+                    },
+                    indexingFileList: [
+                      ...state.indexingFileList,
+                      {
+                        file: data.file,
+                        file_path: data.file_path,
+                        status: "error",
+                        error: data.error,
+                      },
+                    ],
+                  }));
+                } else if (data.type === "embedding") {
+                  set({
+                    indexingStatus: {
+                      folder: folderPath,
+                      progress: 100,
+                      total: 100,
                       status: data.status,
                       currentFile: null,
-                      errors
-                    }
-                  })
-                } else if (data.type === 'done') {
-                  const { setState } = get()
+                      errors,
+                    },
+                  });
+                } else if (data.type === "done") {
                   set((state) => ({
-                    folders: [...state.folders, { 
-                      path: folderPath, 
-                      documentCount: data.processed,
-                      errors: data.errors
-                    }],
+                    folders: [
+                      ...state.folders,
+                      {
+                        path: folderPath,
+                        documentCount: data.processed,
+                        errors: data.errors || 0,
+                      },
+                    ],
                     indexingStatus: null,
-                  }))
-                  return { success: true, processed: data.processed, errors: data.errors }
-                } else if (data.type === 'error') {
-                  throw new Error(data.message)
+                  }));
+
+                  // Show completion toast
+                  const { addToast } = get();
+                  if (data.errors > 0) {
+                    addToast(
+                      `Indexed ${data.processed} files with ${data.errors} errors. Some files couldn't be parsed.`,
+                      "warning",
+                      7000,
+                    );
+                  } else {
+                    addToast(
+                      `Successfully indexed ${data.processed} files!`,
+                      "success",
+                      4000,
+                    );
+                  }
+
+                  return {
+                    success: true,
+                    processed: data.processed,
+                    errors: data.errors,
+                  };
+                } else if (data.type === "error") {
+                  throw new Error(data.message);
                 }
               } catch (e) {
-                console.error('Failed to parse SSE data:', e)
+                console.error("Failed to parse SSE data:", e);
               }
             }
           }
-          
-          set({ indexingStatus: null })
-          return { success: true, processed: documentCount, errors: errors.length }
+
+          set({ indexingStatus: null, indexingFileList: [] });
+          return {
+            success: true,
+            processed: documentCount,
+            errors: errors.length,
+          };
         } catch (error) {
-          set({ indexingStatus: null })
-          throw error
+          set({ indexingStatus: null });
+          throw error;
         }
       },
 
       removeFolder: async (folderPath) => {
         try {
           await fetch(`${API_BASE}/folders/${encodeURIComponent(folderPath)}`, {
-            method: 'DELETE',
-          })
+            method: "DELETE",
+          });
           set((state) => ({
             folders: state.folders.filter((f) => f.path !== folderPath),
-          }))
+          }));
         } catch (error) {
-          console.error('Failed to remove folder:', error)
+          console.error("Failed to remove folder:", error);
         }
       },
 
       // Chat Actions
       sendMessage: async (content) => {
-        const userMessage = { role: 'user', content, timestamp: Date.now() }
+        const userMessage = { role: "user", content, timestamp: Date.now() };
         set((state) => ({
           messages: [...state.messages, userMessage],
           isGenerating: true,
           currentSources: [],
-        }))
+        }));
 
         try {
           const response = await fetch(`${API_BASE}/query`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               query: content,
               model: get().selectedModel,
             }),
-          })
+          });
 
-          if (!response.ok) throw new Error('Query failed')
+          if (!response.ok) throw new Error("Query failed");
 
-          const reader = response.body.getReader()
-          const decoder = new TextDecoder()
-          let assistantContent = ''
-          let sources = []
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let assistantContent = "";
+          let sources = [];
 
           set((state) => ({
-            messages: [...state.messages, { role: 'assistant', content: '', timestamp: Date.now() }],
-          }))
+            messages: [
+              ...state.messages,
+              { role: "assistant", content: "", timestamp: Date.now() },
+            ],
+          }));
 
           while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
+            const { done, value } = await reader.read();
+            if (done) break;
 
-            const chunk = decoder.decode(value)
-            const lines = chunk.split('\n').filter((line) => line.startsWith('data: '))
+            const chunk = decoder.decode(value);
+            const lines = chunk
+              .split("\n")
+              .filter((line) => line.startsWith("data: "));
 
             for (const line of lines) {
               try {
-                const data = JSON.parse(line.slice(6))
-                
-                if (data.type === 'sources') {
-                  sources = data.sources
-                  set({ currentSources: sources })
-                } else if (data.type === 'token') {
-                  assistantContent += data.content
+                const data = JSON.parse(line.slice(6));
+
+                if (data.type === "sources") {
+                  sources = data.sources;
+                  set({ currentSources: sources });
+                } else if (data.type === "token") {
+                  assistantContent += data.content;
                   set((state) => ({
                     messages: state.messages.map((msg, idx) =>
                       idx === state.messages.length - 1
                         ? { ...msg, content: assistantContent }
-                        : msg
+                        : msg,
                     ),
-                  }))
-                } else if (data.type === 'done') {
+                  }));
+                } else if (data.type === "done") {
                   set((state) => ({
                     messages: state.messages.map((msg, idx) =>
                       idx === state.messages.length - 1
                         ? { ...msg, sources }
-                        : msg
+                        : msg,
                     ),
-                  }))
+                  }));
                 }
               } catch (e) {
-                console.error('Failed to parse SSE data:', e)
+                console.error("Failed to parse SSE data:", e);
               }
             }
           }
         } catch (error) {
-          console.error('Chat error:', error)
+          console.error("Chat error:", error);
           set((state) => ({
             messages: [
               ...state.messages,
-              { role: 'assistant', content: `Error: ${error.message}`, timestamp: Date.now(), isError: true },
+              {
+                role: "assistant",
+                content: `Error: ${error.message}`,
+                timestamp: Date.now(),
+                isError: true,
+              },
             ],
-          }))
+          }));
         } finally {
-          set({ isGenerating: false })
+          set({ isGenerating: false });
         }
       },
 
@@ -244,39 +304,54 @@ export const useAppStore = create(
 
       fetchModels: async () => {
         try {
-          const response = await fetch(`${API_BASE}/models`)
-          if (!response.ok) throw new Error('Failed to fetch models')
-          const data = await response.json()
-          set({ availableModels: data.models })
+          const response = await fetch(`${API_BASE}/models`);
+          if (!response.ok) throw new Error("Failed to fetch models");
+          const data = await response.json();
+          set({ availableModels: data.models });
         } catch (error) {
-          console.error('Failed to fetch models:', error)
+          console.error("Failed to fetch models:", error);
         }
       },
 
       // Status Checks
       checkBackendStatus: async () => {
         try {
-          set({ backendStatus: 'connecting' })
-          const response = await fetch(`${API_BASE}/health`)
-          if (!response.ok) throw new Error('Backend unhealthy')
-          const data = await response.json()
+          set({ backendStatus: "connecting" });
+          const response = await fetch(`${API_BASE}/health`);
+          if (!response.ok) throw new Error("Backend unhealthy");
+          const data = await response.json();
           set({
-            backendStatus: 'connected',
+            backendStatus: "connected",
             ollamaStatus: data.ollama_status,
-          })
+          });
         } catch (error) {
-          set({ backendStatus: 'disconnected', ollamaStatus: 'disconnected' })
+          set({ backendStatus: "disconnected", ollamaStatus: "disconnected" });
         }
+      },
+
+      // Toast Actions
+      addToast: (message, type = "info", duration = 5000) => {
+        const id = Date.now();
+        set((state) => ({
+          toasts: [...state.toasts, { id, message, type, duration }],
+        }));
+        return id;
+      },
+
+      removeToast: (id) => {
+        set((state) => ({
+          toasts: state.toasts.filter((toast) => toast.id !== id),
+        }));
       },
     }),
     {
-      name: 'mnemora-storage',
+      name: "mnemora-storage",
       partialize: (state) => ({
         folders: state.folders,
         selectedModel: state.selectedModel,
         theme: state.theme,
         showSources: state.showSources,
       }),
-    }
-  )
-)
+    },
+  ),
+);

@@ -30,7 +30,7 @@ class MarkdownParser:
             return content.strip()
             
         except Exception as e:
-            logger.error(f"Error parsing {file_path}: {e}")
+            logger.error(f"Error parsing markdown {file_path}: {e}", exc_info=True)
             return ""
     
     def _process_content(self, content: str) -> str:
